@@ -1,5 +1,4 @@
 # ---------- Dockerfile (CPU) ----------
-# Base estable con ruedas recientes
 FROM python:3.11-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -7,24 +6,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PADDLE_HOME=/models/paddle \
     PYTHONUNBUFFERED=1
 
-# Paquetes del sistema necesarios para OpenCV, PyMuPDF y utilidades
 RUN apt-get update && apt-get install -y \
-    curl \
-    wget \
-    jq \
-    poppler-utils \
-    libgl1 \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender1 \
-    libgomp1 \
-    libopenblas0 \
+    curl wget jq poppler-utils \
+    libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 libgomp1 libopenblas0 \
     && rm -rf /var/lib/apt/lists/* && apt-get clean
 
 WORKDIR /app
 
-# Herramientas de build + versiones de wheels compatibles
 RUN python -m pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir \
         numpy==1.26.4 \
@@ -37,22 +25,15 @@ RUN python -m pip install --upgrade pip setuptools wheel && \
         paddleocr==2.8.1 \
         requests==2.32.3
 
-# Copia tu código (incluye app.py y healthcheck.py del repo)
 COPY . .
 
-# Puerto expuesto por la app
 EXPOSE 8000
-
-# Volumen para cachear modelos de PaddleOCR
 VOLUME ["/models"]
 
-# Healthcheck: consulta /health en el puerto 8000
-HEALTHCHECK --interval=30s --timeout=5s \
+# Healthcheck robusto
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -fsS http://127.0.0.1:8000/health | grep -q '"status":"ok"' || exit 1
 
-# --- ARRANQUE ---
-# Flask con waitress escuchando en 0.0.0.0:8000
-# (tu app.py debe tener "app = Flask(__name__)")
+# Arranque Flask con Waitress en 8000
 CMD ["waitress-serve", "--listen=0.0.0.0:8000", "app:app"]
 # ---------- fin Dockerfile ----------
-
