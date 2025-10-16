@@ -22,9 +22,9 @@ RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
-    libxrender-dev \
+    libxrender1 \
     libgomp1 \
-    libopenblas-dev \
+    libopenblas0 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -75,3 +75,4 @@ HEALTHCHECK --interval=30s --timeout=15s --start-period=90s --retries=3 \
 
 # Comando de inicio
 CMD ["python", "/app/app.py"]
+
