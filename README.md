@@ -1,0 +1,1 @@
+# PaddleOCRv2
