@@ -46,12 +46,13 @@ EXPOSE 8000
 # Volumen para cachear modelos de PaddleOCR
 VOLUME ["/models"]
 
-# Healthcheck: usa tu healthcheck.py que consulta /health
+# Healthcheck: consulta /health en el puerto 8000
 HEALTHCHECK --interval=30s --timeout=5s \
-  CMD python healthcheck.py || exit 1
+  CMD curl -fsS http://127.0.0.1:8000/health | grep -q '"status":"ok"' || exit 1
 
 # --- ARRANQUE ---
 # Flask con waitress escuchando en 0.0.0.0:8000
 # (tu app.py debe tener "app = Flask(__name__)")
 CMD ["waitress-serve", "--listen=0.0.0.0:8000", "app:app"]
 # ---------- fin Dockerfile ----------
+
