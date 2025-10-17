@@ -16,6 +16,10 @@ from werkzeug.utils import secure_filename
 import logging
 from datetime import datetime
 
+# --- NUEVO: PDF → imágenes ---
+import fitz  # PyMuPDF
+from PIL import Image
+
 # Configurar logging optimizado
 logging.basicConfig(
     level=logging.INFO,
@@ -204,6 +208,25 @@ def process_ocr_result_cpu(ocr_result):
         logger.error(f"⚠️ Error procesando resultado OCR: {e}")
     return text_lines, confidences, coordinates_list
 
+# ---------- NUEVO: helper PDF → imágenes ----------
+def pdf_pages_to_images(pdf_path: str, dpi: int = 240) -> list:
+    """
+    Renderiza todas las páginas del PDF a imágenes numpy (RGB).
+    """
+    images = []
+    doc = fitz.open(pdf_path)
+    try:
+        zoom = dpi / 72.0
+        mat = fitz.Matrix(zoom, zoom)
+        for page in doc:
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            images.append(np.array(img))
+    finally:
+        doc.close()
+    return images
+# -----------------------------------------------
+
 @app.route('/')
 def index():
     """Dashboard CPU optimizado"""
@@ -346,13 +369,34 @@ def analyze_file_ultra():
         filename = secure_filename(file.filename)
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as tmp_file:
             file.save(tmp_file.name)
+
+        try:
+            # --- NUEVO: Soporte PDF multipágina e imágenes ---
+            ext = Path(filename).suffix.lower()
+            merged_result = []
+
+            if ext == ".pdf":
+                imgs = pdf_pages_to_images(tmp_file.name, dpi=240)
+                if not imgs:
+                    raise RuntimeError("No se pudieron renderizar páginas del PDF.")
+                for idx, img in enumerate(imgs, start=1):
+                    logger.debug(f"📄 Página {idx}/{len(imgs)} a OCR...")
+                    page_res = ocr.ocr(img, cls=True) or []
+                    for lines in page_res:
+                        if lines:
+                            merged_result.append(lines)
+            else:
+                page_res = ocr.ocr(tmp_file.name, cls=True) or []
+                for lines in page_res:
+                    if lines:
+                        merged_result.append(lines)
+
+            result = merged_result
+        finally:
             try:
-                result = ocr.ocr(tmp_file.name, cls=True)
-            finally:
-                try:
-                    os.remove(tmp_file.name)
-                except:
-                    pass
+                os.remove(tmp_file.name)
+            except:
+                pass
 
         text_lines, confidences, coordinates_list = process_ocr_result_cpu(result)
         orientations = analyze_orientations(coordinates_list)
@@ -443,15 +487,35 @@ def process_file():
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as tmp_file:
             file.save(tmp_file.name)
+
+        try:
+            # --- NUEVO: Soporte PDF multipágina e imágenes ---
+            ext = Path(filename).suffix.lower()
+            merged_result = []
+
+            if ext == ".pdf":
+                imgs = pdf_pages_to_images(tmp_file.name, dpi=240)
+                if not imgs:
+                    raise RuntimeError("No se pudieron renderizar páginas del PDF.")
+                for idx, img in enumerate(imgs, start=1):
+                    logger.debug(f"📄 Página {idx}/{len(imgs)} a OCR...")
+                    page_res = ocr.ocr(img, cls=True) or []
+                    for lines in page_res:
+                        if lines:
+                            merged_result.append(lines)
+            else:
+                page_res = ocr.ocr(tmp_file.name, cls=True) or []
+                for lines in page_res:
+                    if lines:
+                        merged_result.append(lines)
+
+            result = merged_result
+            logger.debug(f"✅ OCR CPU completado")
+        finally:
             try:
-                logger.debug(f"🔍 OCR CPU procesando {filename}...")
-                result = ocr.ocr(tmp_file.name, cls=True)
-                logger.debug(f"✅ OCR CPU completado")
-            finally:
-                try:
-                    os.remove(tmp_file.name)
-                except:
-                    pass
+                os.remove(tmp_file.name)
+            except:
+                pass
 
         text_lines, confidences, coordinates_list = process_ocr_result_cpu(result)
         orientations = analyze_orientations(coordinates_list)
